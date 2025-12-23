@@ -1,5 +1,5 @@
 # =========================
-# 2026 Workflow Shift Lens (Vertical + Side-by-side)
+# 2026 Workflow Shift Lens (Vertical + Side-by-side + Visible Shift)
 # =========================
 
 YEAR = 2026
@@ -12,9 +12,6 @@ from openai import RateLimitError, APIError, APITimeoutError
 
 from process_library import DOMAINS
 
-# -------------------------
-# Page config
-# -------------------------
 st.set_page_config(
     page_title=f"{YEAR} Workflow Shift Lens",
     page_icon="🧭",
@@ -26,7 +23,6 @@ st.set_page_config(
 # -------------------------
 st.markdown("""
 <style>
-/* Card base */
 .card {
   border: 1px solid rgba(0,0,0,0.12);
   border-radius: 14px;
@@ -36,75 +32,59 @@ st.markdown("""
   margin-bottom: 14px;
   color: rgba(0,0,0,0.90);
 }
+.badge-red { background:#b91c1c; color:#fff; padding:6px 10px; border-radius:10px; font-weight:800; display:inline-block; margin-bottom:10px; }
+.badge-green { background:#15803d; color:#fff; padding:6px 10px; border-radius:10px; font-weight:800; display:inline-block; margin-bottom:10px; }
+.badge-black { background:#111827; color:#fff; padding:6px 10px; border-radius:10px; font-weight:800; display:inline-block; margin-bottom:10px; }
+.badge-purple { background:#7c3aed; color:#fff; padding:6px 10px; border-radius:10px; font-weight:800; display:inline-block; margin-bottom:10px; }
 
-/* Badges */
-.badge-red { background:#b91c1c; color:#fff; padding:6px 10px; border-radius:10px; font-weight:700; display:inline-block; margin-bottom:10px; }
-.badge-green { background:#15803d; color:#fff; padding:6px 10px; border-radius:10px; font-weight:700; display:inline-block; margin-bottom:10px; }
-.badge-black { background:#111827; color:#fff; padding:6px 10px; border-radius:10px; font-weight:700; display:inline-block; margin-bottom:10px; }
 .small-muted { color: rgba(0,0,0,0.65); font-size: 0.92rem; }
 
-/* Vertical workflow container */
-.flow-vertical {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+.flow-vertical { display:flex; flex-direction:column; gap:10px; }
 
-/* Step box */
 .step {
   border: 1px solid rgba(0,0,0,0.14);
   border-radius: 12px;
   padding: 10px 12px;
   background: rgba(255,255,255,0.95);
   box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-  font-weight: 700;
+  font-weight: 800;
+}
+.step.ai-highlight {
+  border-color: rgba(22,163,74,0.55);
+  box-shadow: 0 0 0 3px rgba(22,163,74,0.18), 0 1px 8px rgba(0,0,0,0.06);
+}
+.step.human-upshift {
+  border-color: rgba(124,58,237,0.55);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.16), 0 1px 8px rgba(0,0,0,0.06);
 }
 
-/* Row inside step */
-.step-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
+.step-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 
-/* Keep label readable on phone */
-.step-label {
-  font-size: 0.98rem;
-  line-height: 1.2;
-  max-width: 70%;
-  word-wrap: break-word;
-}
+.step-label { font-size: 0.98rem; line-height:1.2; max-width: 62%; word-wrap: break-word; }
 
-/* Actor chips */
 .chip {
-  display: inline-block;
-  font-size: 0.82rem;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,0.12);
-  font-weight: 750;
-  white-space: nowrap;
+  display:inline-block; font-size:0.80rem; padding:4px 8px; border-radius:999px;
+  border:1px solid rgba(0,0,0,0.12); font-weight:900; white-space:nowrap;
 }
 .chip-human { background: rgba(37,99,235,0.10); }
 .chip-erp   { background: rgba(2,132,199,0.10); }
 .chip-ai    { background: rgba(22,163,74,0.12); }
 .chip-mixed { background: rgba(124,58,237,0.12); }
 
-/* Down arrow */
-.arrow-down {
-  text-align: center;
-  font-size: 18px;
-  font-weight: 900;
-  color: rgba(0,0,0,0.35);
-  line-height: 1;
+.tag {
+  display:inline-block; font-size:0.72rem; padding:3px 7px; border-radius:999px;
+  border:1px solid rgba(0,0,0,0.10); color: rgba(0,0,0,0.70);
+  background: rgba(0,0,0,0.03); font-weight:800; margin-right:6px;
 }
+
+.arrow-down { text-align:center; font-size:18px; font-weight:900; color: rgba(0,0,0,0.35); line-height:1; }
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .card { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); color: rgba(255,255,255,0.92); }
   .small-muted { color: rgba(255,255,255,0.72); }
   .step { background: rgba(17,24,39,0.65); border-color: rgba(255,255,255,0.18); color: rgba(255,255,255,0.92); }
+  .tag { color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
   .arrow-down { color: rgba(255,255,255,0.35); }
   .chip { border-color: rgba(255,255,255,0.18); }
 }
@@ -115,17 +95,20 @@ st.markdown("""
 # Header
 # -------------------------
 st.title(f"🧭 {YEAR} Workflow Shift Lens")
-st.write("Select a domain + workflow to see an **indicative** shift from “today” to “2026 with AI”.")
-st.caption("A lightweight AI experiment by Prabodh — built to visualize how work evolves step-by-step. No data is stored. Not professional advice.")
+st.write("An indicative “before vs after” view of how workflows may evolve as AI gets embedded into systems and teams.")
+st.caption("Built to visualize step-by-step change. No data is stored. Not professional advice.")
 
 # -------------------------
 # Inputs
 # -------------------------
 domain = st.selectbox("Domain", list(DOMAINS.keys()))
 workflow = st.selectbox("Workflow", list(DOMAINS[domain].keys()))
-focus_area = st.selectbox("Focus area (optional)", DOMAINS[domain][workflow])
 
-# Better context (fixed options)
+focus_areas = DOMAINS[domain][workflow]["focus_areas"]
+workflow_goal = DOMAINS[domain][workflow].get("goal", "")
+
+focus_area = st.selectbox("Focus area (optional)", focus_areas)
+
 industry = st.selectbox(
     "Industry context",
     [
@@ -144,24 +127,13 @@ industry = st.selectbox(
 )
 
 erp_maturity = st.selectbox(
-    "Today’s ERP / automation maturity",
+    "Today’s automation maturity",
     [
         "Low (email + spreadsheets heavy)",
-        "Medium (ERP exists, lots of exceptions & manual handoffs)",
-        "High (standardized ERP workflows + reporting, limited manual touchpoints)"
+        "Medium (ERP exists, many manual handoffs/exceptions)",
+        "High (standardized workflows + reporting, limited manual touchpoints)"
     ],
     index=1
-)
-
-operating_model = st.selectbox(
-    "Operating model",
-    [
-        "Single business unit",
-        "Shared Services / SSC",
-        "Multi-country / multi-entity",
-        "Highly regulated / audit-heavy"
-    ],
-    index=0
 )
 
 constraints = st.multiselect(
@@ -180,27 +152,22 @@ constraints = st.multiselect(
 
 extra_notes = st.text_area(
     "Optional notes (1–2 lines)",
-    placeholder="e.g., high invoice volume, complex pricing, unionized workforce, long procurement cycles…",
-    height=80
+    placeholder="What’s unique here? (volume, complexity, regulation, service levels, etc.)",
+    height=70
 )
 
 generate = st.button("Generate workflows")
 
 # -------------------------
-# JSON helpers
+# Helpers
 # -------------------------
 def extract_json_object(text: str) -> str | None:
-    """Extract first top-level JSON object even if model adds extra text."""
     if not text:
         return None
     start = text.find("{")
     if start == -1:
         return None
-
-    depth = 0
-    in_str = False
-    escape = False
-
+    depth, in_str, escape = 0, False, False
     for i in range(start, len(text)):
         ch = text[i]
         if in_str:
@@ -230,9 +197,6 @@ def parse_json_safely(raw: str):
             return json.loads(extracted)
         raise
 
-# -------------------------
-# OpenAI helper
-# -------------------------
 def call_openai_with_retry(client: OpenAI, messages, max_retries: int = 3):
     last_err = None
     for attempt in range(max_retries):
@@ -241,7 +205,7 @@ def call_openai_with_retry(client: OpenAI, messages, max_retries: int = 3):
                 model="gpt-4.1-mini",
                 messages=messages,
                 temperature=0.12,
-                max_tokens=750,
+                max_tokens=900,
                 response_format={"type": "json_object"},
             )
         except (RateLimitError, APITimeoutError, APIError) as e:
@@ -249,20 +213,35 @@ def call_openai_with_retry(client: OpenAI, messages, max_retries: int = 3):
             time.sleep(1.5 * (2 ** attempt))
     raise last_err
 
-# -------------------------
-# Workflow rendering
-# -------------------------
 ICON = {
     "HUMAN": "👤",
     "ERP": "🧾",
     "AI": "🤖",
     "AI+HUMAN": "🤖👤",
-    "HUMAN+AI": "🤖👤",
     "AI+ERP": "🤖🧾",
-    "ERP+AI": "🤖🧾",
     "ERP+HUMAN": "🧾👤",
-    "HUMAN+ERP": "🧾👤",
+    "AI+ERP+HUMAN": "🤖🧾👤"
 }
+
+def normalize_actor(actor: str) -> str:
+    a = (actor or "HUMAN").upper().replace(" ", "")
+    if a in ("HUMAN", "PERSON"):
+        return "HUMAN"
+    if a in ("ERP", "SYSTEM"):
+        return "ERP"
+    if a in ("AI", "LLM"):
+        return "AI"
+    if "+" in a:
+        parts = [p for p in a.split("+") if p]
+        allowed = [p for p in parts if p in ("AI", "ERP", "HUMAN")]
+        if len(allowed) >= 2:
+            order = {"AI": 0, "ERP": 1, "HUMAN": 2}
+            allowed = sorted(set(allowed), key=lambda x: order.get(x, 99))
+            a2 = "+".join(allowed)
+            if a2 == "AI+ERP+HUMAN":
+                return a2
+            return a2
+    return "HUMAN"
 
 def chip_class(actor: str) -> str:
     a = (actor or "").upper().replace(" ", "")
@@ -274,43 +253,13 @@ def chip_class(actor: str) -> str:
         return "chip chip-erp"
     return "chip chip-human"
 
-def normalize_actor(actor: str) -> str:
-    a = (actor or "HUMAN").upper().replace(" ", "")
-    # normalize common variants
-    if a in ("HUMAN", "PERSON"):
-        return "HUMAN"
-    if a in ("ERP", "SYSTEM"):
-        return "ERP"
-    if a in ("AI", "LLM"):
-        return "AI"
-    # allow combos
-    if a in ICON:
-        return a
-    # allow unordered combos like "AI+HUMAN"
-    if "+" in a:
-        parts = [p for p in a.split("+") if p]
-        parts = [p if p in ("AI", "ERP", "HUMAN") else None for p in parts]
-        parts = [p for p in parts if p]
-        if len(parts) >= 2:
-            # keep stable ordering
-            order = {"AI": 0, "ERP": 1, "HUMAN": 2}
-            parts_sorted = sorted(set(parts), key=lambda x: order.get(x, 99))
-            return "+".join(parts_sorted)
-    return "HUMAN"
-
 def shorten_label(label: str) -> str:
-    """Keep diagram labels short: ideally 1–2 words, max 3."""
     if not label:
         return "Step"
     words = label.strip().split()
-    if len(words) <= 3:
-        return " ".join(words)
-    return " ".join(words[:3])
+    return " ".join(words[:3]) if len(words) > 3 else " ".join(words)
 
-def render_vertical_flow(steps):
-    """
-    steps: list of {label: str, actor: 'HUMAN'|'ERP'|'AI'|'AI+HUMAN'|'AI+ERP' ...}
-    """
+def render_vertical_flow(steps, highlight_ai: bool = False):
     if not isinstance(steps, list) or len(steps) == 0:
         st.info("No workflow steps generated.")
         return
@@ -319,12 +268,24 @@ def render_vertical_flow(steps):
     for i, s in enumerate(steps[:10]):
         label = shorten_label((s.get("label") or "").strip())
         actor = normalize_actor(s.get("actor") or "HUMAN")
+        intent = (s.get("intent") or "").strip()  # Admin / Control / Decision / Relationship
         icon = ICON.get(actor, "👤")
 
+        ai_step = ("AI" in actor)  # AI or AI+...
+        human_upshift = (intent in ("Decision", "Relationship", "Judgment", "Strategy"))
+
+        step_classes = ["step"]
+        if highlight_ai and ai_step:
+            step_classes.append("ai-highlight")
+        if highlight_ai and human_upshift:
+            step_classes.append("human-upshift")
+
+        tag_html = f'<span class="tag">{intent}</span>' if intent else ""
+
         blocks.append(f"""
-          <div class="step">
+          <div class="{' '.join(step_classes)}">
             <div class="step-row">
-              <div class="step-label">{label}</div>
+              <div class="step-label">{tag_html}{label}</div>
               <div class="{chip_class(actor)}">{icon} {actor}</div>
             </div>
           </div>
@@ -335,43 +296,51 @@ def render_vertical_flow(steps):
     st.markdown(f'<div class="flow-vertical">{"".join(blocks)}</div>', unsafe_allow_html=True)
 
 # -------------------------
-# Prompt (workflow lens, not rigid linear AI)
+# Prompt: FORCE visible difference + intent tagging
 # -------------------------
 PROMPT_TEMPLATE = f"""
 You are an evidence-minded operating model + process analyst.
 
 Return ONLY a single valid JSON object (no markdown, no extra text).
 
-We are generating an INDICATIVE WORKFLOW LENS (not a perfect process map).
-- Labels must be short: 1–2 words (max 3).
-- Today workflow should include only: HUMAN or ERP (no AI).
-- {YEAR} workflow may include: HUMAN, ERP, AI, AI+HUMAN, AI+ERP.
-- Not every step must be “AI”—AI can be embedded as assist/augment in some steps.
+This is a WORKFLOW LENS (indicative), designed to VISUALLY show efficiency shift.
+Make TODAY vs {YEAR} meaningfully different:
+- TODAY: more handoffs, more manual checks, more admin.
+- {YEAR}: fewer handoffs, more "touchless for clean cases", more automation embedded in ERP, more AI-assisted triage, and humans moved to review/validation/relationship/strategic decisions.
 
-Diagrams should be realistic and conservative:
-- Prefer assist/augment over replace.
-- Include at least one control point where it makes sense (e.g., Approval, Exception, Audit).
-- Keep it generic (no company names, no vendor names).
+Labels must be short: 1–2 words (max 3).
+Include at least one control point (Approval/Exception/Audit) where appropriate.
+
+Actors allowed:
+- today_steps actor: "HUMAN" or "ERP" only
+- future_steps actor: "HUMAN", "ERP", "AI", "AI+HUMAN", "AI+ERP", "AI+ERP+HUMAN"
+
+Add intent for each step to make the shift explicit:
+intent must be ONE of: "Admin", "Control", "Decision", "Relationship"
+- TODAY should contain more "Admin"
+- {YEAR} should contain more "Decision" and "Relationship" for HUMAN-owned steps
 
 JSON schema (exact keys):
 domain (string)
 workflow (string)
 focus_area (string)
-today_steps (array of 7–9 objects: label (string), actor (one of: "HUMAN","ERP"))
-future_steps (array of 7–9 objects: label (string), actor (one of: "HUMAN","ERP","AI","AI+HUMAN","AI+ERP"))
-notes (array of 3 strings) -> short assumptions/constraints reflecting context
+today_steps (array of 7–9 objects: label (string), actor, intent)
+future_steps (array of 7–9 objects: label (string), actor, intent)
+human_shift (array of 3 strings) -> "Humans move from X to Y" style, concrete
+deltas (array of 4 strings) -> concrete differences that explain efficiency
+notes (array of 3 strings) -> constraints/controls reflecting context
 
 Selection:
 Domain: {{domain}}
 Workflow: {{workflow}}
 Focus area: {{focus_area}}
+Workflow goal: {{workflow_goal}}
 
 Context:
 Industry: {{industry}}
-ERP maturity today: {{erp_maturity}}
-Operating model: {{operating_model}}
+Today maturity: {{erp_maturity}}
 Constraints: {{constraints}}
-Extra notes: {{extra_notes}}
+Notes: {{extra_notes}}
 
 Year: {YEAR}
 """
@@ -394,9 +363,9 @@ if generate:
                 domain=domain,
                 workflow=workflow,
                 focus_area=focus_area,
+                workflow_goal=workflow_goal,
                 industry=industry,
                 erp_maturity=erp_maturity,
-                operating_model=operating_model,
                 constraints=(", ".join(constraints) if constraints else "None"),
                 extra_notes=(extra_notes.strip() if extra_notes else "None"),
             )
@@ -407,7 +376,7 @@ if generate:
         try:
             resp = call_openai_with_retry(client, messages)
         except RateLimitError:
-            st.error("Rate limit/quota hit. Try again in a minute (or check billing/usage).")
+            st.error("Rate limit/quota hit. Try again (or check billing/usage).")
             st.stop()
         except Exception as e:
             st.error(f"Unexpected error calling OpenAI: {e}")
@@ -424,51 +393,69 @@ if generate:
 
     today_steps = data.get("today_steps") or []
     future_steps = data.get("future_steps") or []
+    deltas = data.get("deltas") or []
+    human_shift = data.get("human_shift") or []
     notes = data.get("notes") or []
 
-    # basic validation
     if not isinstance(today_steps, list) or len(today_steps) < 6:
-        st.error("Today workflow was incomplete. Try again (or adjust context).")
+        st.error("Today workflow incomplete. Try again (or refine context).")
         st.code(raw)
         st.stop()
     if not isinstance(future_steps, list) or len(future_steps) < 6:
-        st.error(f"{YEAR} workflow was incomplete. Try again (or adjust context).")
+        st.error(f"{YEAR} workflow incomplete. Try again (or refine context).")
         st.code(raw)
         st.stop()
 
     st.subheader("Workflow lens (indicative)")
 
-    # Side-by-side columns
+    # Deltas + shift summary FIRST (so readers see the “why”)
+    st.markdown(f"""
+    <div class="card">
+      <div class="badge-purple">What changes (in plain terms)</div>
+      <ul>
+        {''.join([f"<li>{d}</li>" for d in deltas[:4]])}
+      </ul>
+      <div style="margin-top:10px;">
+        <strong>Human shift:</strong>
+        <ul>
+          {''.join([f"<li>{h}</li>" for h in human_shift[:3]])}
+        </ul>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Side-by-side workflows with SAME titles
     left, right = st.columns(2)
 
     with left:
         st.markdown(f"""
         <div class="card">
-          <div class="badge-red">Today (typical)</div>
+          <div class="badge-red">Workflow today</div>
           <div class="small-muted">{domain} • {workflow}</div>
         </div>
         """, unsafe_allow_html=True)
-        render_vertical_flow(today_steps)
+        render_vertical_flow(today_steps, highlight_ai=False)
 
     with right:
         st.markdown(f"""
         <div class="card">
-          <div class="badge-green">{YEAR} (with AI embedded)</div>
-          <div class="small-muted">{industry} • {erp_maturity.split(' ')[0]} maturity</div>
+          <div class="badge-green">Workflow in {YEAR}</div>
+          <div class="small-muted">{domain} • {workflow}</div>
         </div>
         """, unsafe_allow_html=True)
-        render_vertical_flow(future_steps)
+        render_vertical_flow(future_steps, highlight_ai=True)
 
     # Notes + legend
     st.markdown(f"""
     <div class="card">
-      <div class="badge-black">Notes, constraints & legend</div>
+      <div class="badge-black">Controls, constraints & legend</div>
       <ul>
         {''.join([f"<li>{n}</li>" for n in notes[:3]])}
       </ul>
       <div class="small-muted">
         <strong>Legend:</strong>
-        👤 HUMAN &nbsp; 🧾 ERP &nbsp; 🤖 AI &nbsp; 🤖👤 AI+HUMAN &nbsp; 🤖🧾 AI+ERP
+        👤 HUMAN &nbsp; 🧾 ERP &nbsp; 🤖 AI &nbsp; 🤖👤 AI+HUMAN &nbsp; 🤖🧾 AI+ERP &nbsp; 🤖🧾👤 AI+ERP+HUMAN<br/>
+        <strong>Intent tags:</strong> Admin / Control / Decision / Relationship
       </div>
     </div>
     """, unsafe_allow_html=True)
