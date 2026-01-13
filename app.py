@@ -137,6 +137,7 @@ if "last_result" not in st.session_state:
     st.session_state.last_result = None
 if "last_error" not in st.session_state:
     st.session_state.last_error = None
+# We still keep last_raw in state for internal repair logic (not displayed)
 if "last_raw" not in st.session_state:
     st.session_state.last_raw = None
 
@@ -416,7 +417,7 @@ generate = st.button("Generate optimized workflow")
 # -------------------------
 if generate:
     st.session_state.last_error = None
-    st.session_state.last_raw = None
+    st.session_state.last_raw = None  # keep for internal repair, not displayed
 
     steps = clean_lines(current_workflow_text)
     if len(steps) < 4:
@@ -529,14 +530,12 @@ User CURRENT workflow steps (one per line):
 if st.session_state.last_error:
     st.error(st.session_state.last_error)
 
-if st.session_state.last_raw:
-    with st.expander("Debug: last raw model output"):
-        st.code(st.session_state.last_raw)
+# NOTE: Debug UI has been removed on purpose.
+# (We still keep st.session_state.last_raw internally for repair parsing.)
 
 data = st.session_state.last_result
 
 if isinstance(data, dict):
-    # Normalize fields defensively
     functional_domain_out = safe_str(data.get("functional_domain"), functional_domain)
     process_workflow_out = safe_str(data.get("process_workflow"), process_workflow)
     sub_process_out = safe_str(data.get("sub_process"), sub_process)
@@ -564,7 +563,7 @@ if isinstance(data, dict):
     c1, c2 = st.columns(2)
 
     with c1:
-        st.markdown(f"""
+        st.markdown("""
         <div class="card">
           <div class="badge-red">Today (typical)</div>
           <div class="small-muted">Human + ERP handoffs, more admin + exception work.</div>
@@ -573,7 +572,7 @@ if isinstance(data, dict):
         render_vertical_flow(today_steps, highlight_future=False)
 
     with c2:
-        st.markdown(f"""
+        st.markdown("""
         <div class="card">
           <div class="badge-green">Optimized (AI-augmented)</div>
           <div class="small-muted">Fewer handoffs, more touchless processing, humans shifted to higher-value steps.</div>
@@ -581,7 +580,6 @@ if isinstance(data, dict):
         """, unsafe_allow_html=True)
         render_vertical_flow(future_steps, highlight_future=True)
 
-    # Mapping section
     st.markdown("### Step mapping (future → today)")
     if isinstance(future_steps, list) and len(future_steps) > 0:
         for fs in future_steps[:12]:
@@ -603,7 +601,6 @@ if isinstance(data, dict):
     else:
         st.info("No mapping available.")
 
-    # Deltas + human shift
     d1, d2 = st.columns(2)
     with d1:
         st.markdown("<div class='card'><div class='badge-black'>Key deltas</div></div>", unsafe_allow_html=True)
@@ -619,7 +616,6 @@ if isinstance(data, dict):
         else:
             st.write("• (No human shift provided)")
 
-    # Tools
     st.markdown("### Tool suggestions (examples)")
     if tool_suggestions:
         for t in tool_suggestions[:4]:
@@ -640,7 +636,6 @@ if isinstance(data, dict):
     else:
         st.info("No tool suggestions available.")
 
-    # Glossary
     st.markdown("### Glossary (terminology)")
     if glossary:
         for g in glossary[:8]:
@@ -651,13 +646,8 @@ if isinstance(data, dict):
     else:
         st.write("—")
 
-    # Notes
     if notes:
         st.markdown("### Notes")
         st.write("\n".join([f"• {x}" for x in notes[:6]]))
 
     st.caption("Tip: Don’t enter sensitive info. This is a demo/prototype for exploration, not professional advice.")
-# ---- DEBUG (REMOVE FOR PROD) ----
-# with st.expander("Debug"):
-#     st.write("Last raw model output")
-#     st.code(st.session_state.get("last_raw", ""))
