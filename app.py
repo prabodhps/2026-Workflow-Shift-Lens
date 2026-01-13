@@ -1,27 +1,17 @@
 # =========================
 # 2026 Workflow Shift Lens — Custom workflow input → AI-optimized workflow
-# Fixes: truncated JSON / "non-JSON" errors by auto-repairing partial outputs
+# Adds: Workflow Domain + Sub-Domain + Sub-process drilldown
 # =========================
 
 YEAR = 2026
 
 import json
 import time
-import csv
-import os
-from datetime import datetime, timezone
-
 import streamlit as st
 from openai import OpenAI
 from openai import RateLimitError, APIError, APITimeoutError
 
 from process_library import DOMAINS, TOOL_LIBRARY, get_default_steps
-
-# Optional (persistent logging via webhook). If requests isn't installed, app still works.
-try:
-    import requests
-except Exception:
-    requests = None
 
 
 # -------------------------
@@ -133,19 +123,30 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # -------------------------
 # Header
 # -------------------------
 st.title(f"🧭 {YEAR} Workflow Shift Lens — Custom")
-st.write("Pick a functional area, paste your *current* workflow steps, and generate an optimized 2026 workflow with AI embedded.")
-st.caption("Please avoid sensitive data. This is an indicative workflow lens, not implementation advice.")
+st.write("Select a workflow domain, sub-domain, and sub-process. Edit your current steps, then generate an AI-optimized 2026 workflow.")
+st.caption("Avoid sensitive data. This is an indicative workflow lens — not implementation advice.")
 
 
 # -------------------------
-# Inputs
+# NEW: Domain → Sub-domain → Sub-process dropdowns
 # -------------------------
-domain = st.selectbox("Functional area", list(DOMAINS.keys()))
-workflow = st.selectbox("Workflow template", list(DOMAINS[domain].keys()))
+workflow_domain = st.selectbox("Workflow Domain", list(DOMAINS.keys()))
+
+sub_domains = list(DOMAINS[workflow_domain].keys())
+workflow_sub_domain = st.selectbox("Workflow Sub-Domain", sub_domains)
+
+sub_processes_dict = DOMAINS[workflow_domain][workflow_sub_domain].get("sub_processes", {}) or {}
+sub_process_options = list(sub_processes_dict.keys()) if isinstance(sub_processes_dict, dict) else []
+workflow_sub_process = st.selectbox(
+    "Sub-process (drill-down)",
+    sub_process_options if sub_process_options else ["(No sub-processes configured)"],
+    disabled=(len(sub_process_options) == 0)
+)
 
 industry = st.selectbox(
     "Industry context",
@@ -188,13 +189,20 @@ constraints = st.multiselect(
     default=[]
 )
 
-workflow_goal = DOMAINS[domain][workflow].get("goal", "")
+# goals
+workflow_goal = DOMAINS[workflow_domain][workflow_sub_domain].get("goal", "")
+sub_process_goal = ""
+if isinstance(sub_processes_dict, dict) and workflow_sub_process in sub_processes_dict:
+    sub_process_goal = sub_processes_dict[workflow_sub_process].get("goal", "")
 
-prefill = "\n".join(get_default_steps(domain, workflow)) or ""
+# Prefill steps based on selection
+prefill_steps = get_default_steps(workflow_domain, workflow_sub_domain, workflow_sub_process)
+prefill_text = "\n".join(prefill_steps) if prefill_steps else ""
+
 st.markdown("### Your current workflow (editable)")
 current_workflow_text = st.text_area(
     "Enter one step per line (you can edit the template below).",
-    value=prefill,
+    value=prefill_text,
     height=220,
 )
 
@@ -215,10 +223,9 @@ def clean_lines(text: str) -> list[str]:
         if len(s) > 140:
             s = s[:140]
         lines.append(s)
-    return lines[:18]  # allow a bit more
+    return lines[:18]
 
 def extract_json_object(text: str) -> str | None:
-    """Extract first complete JSON object { ... } even if the model adds extra text around it."""
     if not text:
         return None
     start = text.find("{")
@@ -272,10 +279,6 @@ def call_openai_with_retry(client: OpenAI, messages, max_retries: int = 3, max_t
     raise last_err
 
 def try_repair_json(client: OpenAI, raw_partial: str, max_tokens: int = 1600) -> str:
-    """
-    If model returned truncated JSON, ask it to continue and return ONLY the completed JSON.
-    We pass the partial content and ask for a valid final object.
-    """
     repair_prompt = f"""
 You returned an incomplete/truncated JSON object. Continue from where it cut off and return ONLY one complete valid JSON object.
 Rules:
@@ -295,6 +298,7 @@ PARTIAL_JSON_END
     ]
     resp = call_openai_with_retry(client, messages, max_retries=2, max_tokens=max_tokens)
     return resp.choices[0].message.content or ""
+
 
 ICON = {
     "HUMAN": "👤",
@@ -397,7 +401,6 @@ if generate:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     tool_lib_json = json.dumps(TOOL_LIBRARY, ensure_ascii=False, indent=2)
 
-    # Build prompt WITHOUT .format (prevents KeyError issues)
     prompt = f"""
 You are an evidence-minded operating model + process analyst.
 
@@ -427,7 +430,7 @@ Mapping requirement:
 
 Tools:
 Use ONLY the provided TOOL_LIBRARY. Do NOT invent tools.
-Return exactly 4 tool suggestions (to reduce output size and truncation risk).
+Return exactly 4 tool suggestions.
 
 Terminology:
 Provide a glossary of 6 terms used in the workflow lens.
@@ -437,7 +440,9 @@ TOOL_LIBRARY (JSON):
 
 JSON schema (exact keys):
 domain (string)
-workflow (string)
+workflow_domain (string)
+workflow_sub_domain (string)
+workflow_sub_process (string)
 today_steps (array of 6–12 objects):
   id ("T1".."T12"), label, actor ("HUMAN"|"ERP"), intent
 future_steps (array of 6–12 objects):
@@ -449,9 +454,11 @@ tool_suggestions (array of 4 objects: tool_category, example_tools (1–3 from l
 notes (array of 3 strings)
 
 Context:
-Domain: {domain}
-Workflow template name: {workflow}
+Workflow Domain: {workflow_domain}
+Workflow Sub-Domain: {workflow_sub_domain}
+Workflow Sub-Process: {workflow_sub_process}
 Workflow goal: {workflow_goal}
+Sub-process goal: {sub_process_goal if sub_process_goal else "None"}
 Industry: {industry}
 Today automation maturity: {maturity}
 Constraints: {", ".join(constraints) if constraints else "None"}
@@ -480,11 +487,9 @@ Year: {YEAR}
 
     raw = (resp.choices[0].message.content or "").strip()
 
-    # 1) Parse normal
     try:
         data = parse_json_safely(raw)
     except Exception:
-        # 2) Attempt repair (handles truncation)
         with st.spinner("Repairing incomplete output…"):
             try:
                 repaired = try_repair_json(client, raw, max_tokens=1800)
@@ -503,7 +508,6 @@ Year: {YEAR}
     tool_suggestions = data.get("tool_suggestions") or []
     notes = data.get("notes") or []
 
-    # Defensive sanity
     if not isinstance(today_steps, list) or len(today_steps) < 4:
         st.error("Today workflow incomplete. Try again.")
         st.code(raw)
@@ -535,7 +539,7 @@ Year: {YEAR}
         st.markdown(f"""
         <div class="card">
           <div class="badge-red">Workflow today</div>
-          <div class="small-muted">{domain} • {workflow}</div>
+          <div class="small-muted">{workflow_domain} • {workflow_sub_domain} • {workflow_sub_process}</div>
         </div>
         """, unsafe_allow_html=True)
         render_vertical_flow(today_steps, highlight_ai=False)
@@ -544,7 +548,7 @@ Year: {YEAR}
         st.markdown(f"""
         <div class="card">
           <div class="badge-green">Workflow in {YEAR}</div>
-          <div class="small-muted">{domain} • {workflow}</div>
+          <div class="small-muted">{workflow_domain} • {workflow_sub_domain} • {workflow_sub_process}</div>
         </div>
         """, unsafe_allow_html=True)
         render_vertical_flow(future_steps, highlight_ai=True)
