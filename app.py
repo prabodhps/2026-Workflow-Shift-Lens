@@ -1,5 +1,5 @@
 # =========================
-# 2026 Workflow Shift Lens (User-input current workflow + Optimized AI workflow + Logging)
+# 2026 Workflow Shift Lens (Custom input + Optimized AI workflow + Optional logging)
 # =========================
 
 YEAR = 2026
@@ -16,12 +16,16 @@ from openai import RateLimitError, APIError, APITimeoutError
 
 from process_library import DOMAINS, TOOL_LIBRARY, get_default_steps
 
-# Optional: webhook logging (persistent) if you set LOG_WEBHOOK_URL in secrets
+# Optional (persistent logging via webhook). If requests isn't installed, app still works.
 try:
     import requests
 except Exception:
     requests = None
 
+
+# -------------------------
+# Page config
+# -------------------------
 st.set_page_config(
     page_title=f"{YEAR} Workflow Shift Lens",
     page_icon="🧭",
@@ -133,7 +137,7 @@ st.markdown("""
 # -------------------------
 st.title(f"🧭 {YEAR} Workflow Shift Lens — Custom")
 st.write("Pick a functional area, paste your *current* workflow steps, and generate an optimized 2026 workflow with AI embedded.")
-st.caption("No sensitive data please. If logging is enabled, only your workflow text + selections are stored (no personal identifiers).")
+st.caption("No sensitive data please. If logging is enabled, only workflow text + selections are stored (no personal identifiers).")
 
 # -------------------------
 # Inputs
@@ -184,24 +188,22 @@ constraints = st.multiselect(
 
 workflow_goal = DOMAINS[domain][workflow].get("goal", "")
 
-# Prefill current workflow input from template (editable)
 prefill = "\n".join(get_default_steps(domain, workflow)) or ""
 st.markdown("### Your current workflow (editable)")
 current_workflow_text = st.text_area(
     "Enter one step per line (you can edit the template below).",
     value=prefill,
     height=220,
-    placeholder="e.g.\nRequest intake\nApprovals\nPO creation\nReceiving\nInvoice capture\nMatching\nPayment"
 )
 
 extra_notes = st.text_area("Optional notes (1–2 lines)", height=70)
 
-# Logging toggle
 st.markdown("### Optional: save workflow inputs for future analysis")
 enable_logging = st.checkbox("Save my workflow inputs (anonymized)", value=False)
 st.caption("If enabled, the app stores domain/workflow + your current steps + context selections. No names/emails/IPs are collected.")
 
 generate = st.button("Generate optimized workflow")
+
 
 # -------------------------
 # Helpers
@@ -215,7 +217,6 @@ def clean_lines(text: str) -> list[str]:
         if len(s) > 140:
             s = s[:140]
         lines.append(s)
-    # avoid extremely long workflows for token/cost control
     return lines[:15]
 
 def extract_json_object(text: str) -> str | None:
@@ -360,7 +361,6 @@ def render_vertical_flow(steps, highlight_ai: bool = False):
 LOG_FILE = "workflow_inputs.csv"
 
 def log_input(payload: dict):
-    # Option B (preferred): webhook -> persistent sheet/db (if you configure)
     webhook = None
     if "LOG_WEBHOOK_URL" in st.secrets:
         webhook = str(st.secrets["LOG_WEBHOOK_URL"]).strip() or None
@@ -370,10 +370,8 @@ def log_input(payload: dict):
             requests.post(webhook, json=payload, timeout=4)
             return "webhook"
         except Exception:
-            # fall back to local file
             pass
 
-    # Option A: local CSV (may not persist across redeploys)
     try:
         exists = os.path.exists(LOG_FILE)
         with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
@@ -388,23 +386,54 @@ def log_input(payload: dict):
 def load_local_logs(limit: int = 200):
     if not os.path.exists(LOG_FILE):
         return []
-    rows = []
     try:
         with open(LOG_FILE, "r", encoding="utf-8") as f:
-            r = csv.DictReader(f)
-            for row in r:
-                rows.append(row)
+            rows = list(csv.DictReader(f))
         return rows[-limit:]
     except Exception:
         return []
 
-# -------------------------
-# Prompt
-# -------------------------
-TOOL_LIB_FOR_PROMPT = json.dumps(TOOL_LIBRARY, ensure_ascii=False, indent=2)
-TOOL_LIB_FOR_PROMPT_ESCAPED = TOOL_LIB_FOR_PROMPT.replace("{", "{{").replace("}", "}}")
 
-PROMPT_TEMPLATE = f"""
+# -------------------------
+# Generate
+# -------------------------
+if generate:
+    steps = clean_lines(current_workflow_text)
+    if len(steps) < 4:
+        st.warning("Please enter at least 4 workflow steps (one per line).")
+        st.stop()
+
+    if "OPENAI_API_KEY" not in st.secrets or not str(st.secrets["OPENAI_API_KEY"]).strip():
+        st.error("Missing OPENAI_API_KEY in Streamlit Secrets.")
+        st.stop()
+
+    # Optional logging payload (anonymized)
+    if enable_logging:
+        payload = {
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "domain": domain,
+            "workflow": workflow,
+            "industry": industry,
+            "maturity": maturity,
+            "constraints": "; ".join(constraints) if constraints else "",
+            "current_steps": " | ".join(steps),
+            "user_notes": (extra_notes or "").strip()[:300],
+        }
+        mode = log_input(payload)
+        if mode == "webhook":
+            st.success("Saved your workflow input (webhook).")
+        elif mode == "local":
+            st.info("Saved locally (note: local storage may reset on redeploy).")
+        else:
+            st.warning("Could not save input (logging unavailable).")
+
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+    # JSON tool library (safe, because we DO NOT use .format anywhere on it)
+    tool_lib_json = json.dumps(TOOL_LIBRARY, ensure_ascii=False, indent=2)
+
+    # ✅ Build the prompt as an f-string (NO .format) -> prevents KeyError permanently
+    prompt = f"""
 You are an evidence-minded operating model + process analyst.
 
 Return ONLY one valid JSON object (no markdown, no extra text).
@@ -440,7 +469,7 @@ Provide a glossary of 6 terms used in the workflow lens.
 Each glossary item: term + one-line plain-English definition.
 
 TOOL_LIBRARY (JSON):
-{TOOL_LIB_FOR_PROMPT_ESCAPED}
+{tool_lib_json}
 
 JSON schema (exact keys):
 domain (string)
@@ -456,70 +485,23 @@ tool_suggestions (array of 5 objects: tool_category, example_tools (1–3 from l
 notes (array of 3 strings)
 
 Context:
-Domain: {{domain}}
-Workflow template name: {{workflow}}
-Workflow goal: {{workflow_goal}}
-Industry: {{industry}}
-Today automation maturity: {{maturity}}
-Constraints: {{constraints}}
-User notes: {{extra_notes}}
+Domain: {domain}
+Workflow template name: {workflow}
+Workflow goal: {workflow_goal}
+Industry: {industry}
+Today automation maturity: {maturity}
+Constraints: {", ".join(constraints) if constraints else "None"}
+User notes: {(extra_notes.strip() if extra_notes else "None")}
 
 User CURRENT workflow steps (one per line):
-{{current_steps}}
+{chr(10).join(steps)}
 
 Year: {YEAR}
-"""
-
-# -------------------------
-# Generate
-# -------------------------
-if generate:
-    steps = clean_lines(current_workflow_text)
-    if len(steps) < 4:
-        st.warning("Please enter at least 4 workflow steps (one per line).")
-        st.stop()
-
-    if "OPENAI_API_KEY" not in st.secrets or not str(st.secrets["OPENAI_API_KEY"]).strip():
-        st.error("Missing OPENAI_API_KEY in Streamlit Secrets.")
-        st.stop()
-
-    # logging payload (anonymized)
-    if enable_logging:
-        payload = {
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "domain": domain,
-            "workflow": workflow,
-            "industry": industry,
-            "maturity": maturity,
-            "constraints": "; ".join(constraints) if constraints else "",
-            "current_steps": " | ".join(steps),
-            "user_notes": (extra_notes or "").strip()[:300],
-        }
-        mode = log_input(payload)
-        if mode == "webhook":
-            st.success("Saved your workflow input (webhook).")
-        elif mode == "local":
-            st.info("Saved locally (note: local storage may reset on redeploy).")
-        else:
-            st.warning("Could not save input (logging unavailable).")
-
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+""".strip()
 
     messages = [
         {"role": "system", "content": "Return ONLY one valid JSON object. No markdown. No extra keys."},
-        {
-            "role": "user",
-            "content": PROMPT_TEMPLATE.format(
-                domain=domain,
-                workflow=workflow,
-                workflow_goal=workflow_goal,
-                industry=industry,
-                maturity=maturity,
-                constraints=(", ".join(constraints) if constraints else "None"),
-                extra_notes=(extra_notes.strip() if extra_notes else "None"),
-                current_steps="\n".join(steps),
-            )
-        }
+        {"role": "user", "content": prompt}
     ]
 
     with st.spinner("Generating optimized workflow…"):
@@ -533,6 +515,7 @@ if generate:
             st.stop()
 
     raw = resp.choices[0].message.content
+
     try:
         data = parse_json_safely(raw)
     except Exception:
@@ -550,10 +533,13 @@ if generate:
 
     if not isinstance(today_steps, list) or len(today_steps) < 4:
         st.error("Today workflow incomplete. Try again.")
-        st.code(raw); st.stop()
+        st.code(raw)
+        st.stop()
+
     if not isinstance(future_steps, list) or len(future_steps) < 4:
         st.error(f"{YEAR} workflow incomplete. Try again.")
-        st.code(raw); st.stop()
+        st.code(raw)
+        st.stop()
 
     today_by_id = {s.get("id"): s for s in today_steps if s.get("id")}
 
@@ -668,18 +654,16 @@ if generate:
     """, unsafe_allow_html=True)
 
 # -------------------------
-# Optional: download local logs (if any)
+# Admin: download saved inputs (local CSV)
 # -------------------------
 with st.expander("Admin: download saved inputs (local CSV)", expanded=False):
     rows = load_local_logs()
     if rows:
-        st.caption("This is local storage (may reset). For persistent logging, configure LOG_WEBHOOK_URL.")
-        csv_text = ""
-        # rebuild CSV string for download
+        st.caption("Local storage may reset on redeploy. For persistent logging, configure LOG_WEBHOOK_URL.")
         headers = list(rows[0].keys())
-        csv_text += ",".join(headers) + "\n"
+        out = ",".join(headers) + "\n"
         for r in rows:
-            csv_text += ",".join([str(r.get(h, "")).replace("\n", " ").replace(",", " ") for h in headers]) + "\n"
-        st.download_button("Download workflow_inputs.csv", data=csv_text, file_name="workflow_inputs.csv", mime="text/csv")
+            out += ",".join([str(r.get(h, "")).replace("\n", " ").replace(",", " ") for h in headers]) + "\n"
+        st.download_button("Download workflow_inputs.csv", data=out, file_name="workflow_inputs.csv", mime="text/csv")
     else:
         st.info("No local logs found yet.")
