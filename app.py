@@ -440,7 +440,7 @@ Provide a glossary of 6 terms used in the workflow lens.
 Each glossary item: term + one-line plain-English definition.
 
 TOOL_LIBRARY (JSON):
-{TOOL_LIB_FOR_PROMPT}
+{TOOL_LIB_FOR_PROMPT_ESCAPED}
 
 JSON schema (exact keys):
 domain (string)
