@@ -1,5 +1,6 @@
 # =========================
-# 2026 Workflow Shift Lens (Custom input + Optimized AI workflow + Optional logging)
+# 2026 Workflow Shift Lens — Custom workflow input → AI-optimized workflow
+# Fixes: truncated JSON / "non-JSON" errors by auto-repairing partial outputs
 # =========================
 
 YEAR = 2026
@@ -137,7 +138,8 @@ st.markdown("""
 # -------------------------
 st.title(f"🧭 {YEAR} Workflow Shift Lens — Custom")
 st.write("Pick a functional area, paste your *current* workflow steps, and generate an optimized 2026 workflow with AI embedded.")
-st.caption("No sensitive data please. If logging is enabled, only workflow text + selections are stored (no personal identifiers).")
+st.caption("Please avoid sensitive data. This is an indicative workflow lens, not implementation advice.")
+
 
 # -------------------------
 # Inputs
@@ -198,10 +200,6 @@ current_workflow_text = st.text_area(
 
 extra_notes = st.text_area("Optional notes (1–2 lines)", height=70)
 
-st.markdown("### Optional: save workflow inputs for future analysis")
-enable_logging = st.checkbox("Save my workflow inputs (anonymized)", value=False)
-st.caption("If enabled, the app stores domain/workflow + your current steps + context selections. No names/emails/IPs are collected.")
-
 generate = st.button("Generate optimized workflow")
 
 
@@ -217,9 +215,10 @@ def clean_lines(text: str) -> list[str]:
         if len(s) > 140:
             s = s[:140]
         lines.append(s)
-    return lines[:15]
+    return lines[:18]  # allow a bit more
 
 def extract_json_object(text: str) -> str | None:
+    """Extract first complete JSON object { ... } even if the model adds extra text around it."""
     if not text:
         return None
     start = text.find("{")
@@ -247,6 +246,7 @@ def extract_json_object(text: str) -> str | None:
     return None
 
 def parse_json_safely(raw: str):
+    raw = (raw or "").strip()
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -255,21 +255,46 @@ def parse_json_safely(raw: str):
             return json.loads(extracted)
         raise
 
-def call_openai_with_retry(client: OpenAI, messages, max_retries: int = 3):
+def call_openai_with_retry(client: OpenAI, messages, max_retries: int = 3, max_tokens: int = 2200):
     last_err = None
     for attempt in range(max_retries):
         try:
             return client.chat.completions.create(
                 model="gpt-4.1-mini",
                 messages=messages,
-                temperature=0.12,
-                max_tokens=1300,
+                temperature=0.10,
+                max_tokens=max_tokens,
                 response_format={"type": "json_object"},
             )
         except (RateLimitError, APITimeoutError, APIError) as e:
             last_err = e
             time.sleep(1.5 * (2 ** attempt))
     raise last_err
+
+def try_repair_json(client: OpenAI, raw_partial: str, max_tokens: int = 1600) -> str:
+    """
+    If model returned truncated JSON, ask it to continue and return ONLY the completed JSON.
+    We pass the partial content and ask for a valid final object.
+    """
+    repair_prompt = f"""
+You returned an incomplete/truncated JSON object. Continue from where it cut off and return ONLY one complete valid JSON object.
+Rules:
+- Output must be a single JSON object (no markdown, no extra commentary).
+- Preserve the same schema and keys as the partial object.
+- Complete any open arrays/objects and missing fields.
+- Ensure JSON is valid.
+
+PARTIAL_JSON_START:
+{raw_partial}
+PARTIAL_JSON_END
+""".strip()
+
+    messages = [
+        {"role": "system", "content": "Return ONLY one valid JSON object. No markdown."},
+        {"role": "user", "content": repair_prompt},
+    ]
+    resp = call_openai_with_retry(client, messages, max_retries=2, max_tokens=max_tokens)
+    return resp.choices[0].message.content or ""
 
 ICON = {
     "HUMAN": "👤",
@@ -355,44 +380,6 @@ def render_vertical_flow(steps, highlight_ai: bool = False):
 
     st.markdown(f'<div class="flow-vertical">{"".join(blocks)}</div>', unsafe_allow_html=True)
 
-# -------------------------
-# Logging (A: local CSV fallback, B: webhook if provided)
-# -------------------------
-LOG_FILE = "workflow_inputs.csv"
-
-def log_input(payload: dict):
-    webhook = None
-    if "LOG_WEBHOOK_URL" in st.secrets:
-        webhook = str(st.secrets["LOG_WEBHOOK_URL"]).strip() or None
-
-    if webhook and requests:
-        try:
-            requests.post(webhook, json=payload, timeout=4)
-            return "webhook"
-        except Exception:
-            pass
-
-    try:
-        exists = os.path.exists(LOG_FILE)
-        with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=list(payload.keys()))
-            if not exists:
-                w.writeheader()
-            w.writerow(payload)
-        return "local"
-    except Exception:
-        return "none"
-
-def load_local_logs(limit: int = 200):
-    if not os.path.exists(LOG_FILE):
-        return []
-    try:
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-        return rows[-limit:]
-    except Exception:
-        return []
-
 
 # -------------------------
 # Generate
@@ -407,32 +394,10 @@ if generate:
         st.error("Missing OPENAI_API_KEY in Streamlit Secrets.")
         st.stop()
 
-    # Optional logging payload (anonymized)
-    if enable_logging:
-        payload = {
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "domain": domain,
-            "workflow": workflow,
-            "industry": industry,
-            "maturity": maturity,
-            "constraints": "; ".join(constraints) if constraints else "",
-            "current_steps": " | ".join(steps),
-            "user_notes": (extra_notes or "").strip()[:300],
-        }
-        mode = log_input(payload)
-        if mode == "webhook":
-            st.success("Saved your workflow input (webhook).")
-        elif mode == "local":
-            st.info("Saved locally (note: local storage may reset on redeploy).")
-        else:
-            st.warning("Could not save input (logging unavailable).")
-
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-    # JSON tool library (safe, because we DO NOT use .format anywhere on it)
     tool_lib_json = json.dumps(TOOL_LIBRARY, ensure_ascii=False, indent=2)
 
-    # ✅ Build the prompt as an f-string (NO .format) -> prevents KeyError permanently
+    # Build prompt WITHOUT .format (prevents KeyError issues)
     prompt = f"""
 You are an evidence-minded operating model + process analyst.
 
@@ -445,28 +410,27 @@ showing (a) fewer handoffs, (b) more touchless processing for clean cases,
 
 Important:
 - Use the user's input steps as the baseline.
-- Do NOT invent domain-specific steps unrelated to the input; you may reorder, merge, rename, or add up to 2 missing control steps.
+- You may reorder, merge, rename, or add up to 2 missing control steps.
 - Keep step labels short: 1–2 words (max 3).
-- Include at least one control point where appropriate (Approval / Exception / Audit).
+- Include at least one control checkpoint.
 
 Actors:
 - today_steps actor: HUMAN or ERP only
 - future_steps actor: HUMAN, ERP, AI, AI+HUMAN, AI+ERP, AI+ERP+HUMAN
 
-Intent (for each step): Admin / Control / Decision / Relationship
-- Today should have more Admin.
+Intent (each step): Admin / Control / Decision / Relationship
+- Today should skew more Admin.
 - Future should increase Decision + Relationship for HUMAN-owned steps.
 
-Mapping requirement (critical):
+Mapping requirement:
 - Every future step MUST include maps_to: array of TODAY step ids it replaces/absorbs (e.g., ["T2","T3"]).
 
 Tools:
 Use ONLY the provided TOOL_LIBRARY. Do NOT invent tools.
-Propose 5 tool suggestions relevant to this workflow.
+Return exactly 4 tool suggestions (to reduce output size and truncation risk).
 
 Terminology:
 Provide a glossary of 6 terms used in the workflow lens.
-Each glossary item: term + one-line plain-English definition.
 
 TOOL_LIBRARY (JSON):
 {tool_lib_json}
@@ -481,7 +445,7 @@ future_steps (array of 6–12 objects):
 human_shift (array of 3 strings)
 deltas (array of 4 strings)
 glossary (array of 6 objects: term, definition)
-tool_suggestions (array of 5 objects: tool_category, example_tools (1–3 from library), use_in_workflow, fit_notes)
+tool_suggestions (array of 4 objects: tool_category, example_tools (1–3 from library), use_in_workflow, fit_notes)
 notes (array of 3 strings)
 
 Context:
@@ -506,7 +470,7 @@ Year: {YEAR}
 
     with st.spinner("Generating optimized workflow…"):
         try:
-            resp = call_openai_with_retry(client, messages)
+            resp = call_openai_with_retry(client, messages, max_retries=3, max_tokens=2200)
         except RateLimitError:
             st.error("Rate limit/quota hit. Try again (or check billing/usage).")
             st.stop()
@@ -514,14 +478,22 @@ Year: {YEAR}
             st.error(f"Unexpected error calling OpenAI: {e}")
             st.stop()
 
-    raw = resp.choices[0].message.content
+    raw = (resp.choices[0].message.content or "").strip()
 
+    # 1) Parse normal
     try:
         data = parse_json_safely(raw)
     except Exception:
-        st.error("Model returned non-JSON output. Raw response below:")
-        st.code(raw)
-        st.stop()
+        # 2) Attempt repair (handles truncation)
+        with st.spinner("Repairing incomplete output…"):
+            try:
+                repaired = try_repair_json(client, raw, max_tokens=1800)
+                data = parse_json_safely(repaired)
+                raw = repaired
+            except Exception:
+                st.error("Model returned incomplete/non-JSON output even after repair. Raw response below:")
+                st.code(raw)
+                st.stop()
 
     today_steps = data.get("today_steps") or []
     future_steps = data.get("future_steps") or []
@@ -531,6 +503,7 @@ Year: {YEAR}
     tool_suggestions = data.get("tool_suggestions") or []
     notes = data.get("notes") or []
 
+    # Defensive sanity
     if not isinstance(today_steps, list) or len(today_steps) < 4:
         st.error("Today workflow incomplete. Try again.")
         st.code(raw)
@@ -621,10 +594,10 @@ Year: {YEAR}
                 """, unsafe_allow_html=True)
 
     if isinstance(tool_suggestions, list) and len(tool_suggestions) > 0:
-        st.markdown("### Realistic AI / automation tools to enable this")
-        st.caption("Tools are examples of widely used enterprise platforms. This workflow lens is tool-agnostic.")
+        st.markdown("### AI / automation enablers (realistic)")
+        st.caption("Examples are common enterprise tools. This is tool-agnostic and indicative.")
 
-        for t in tool_suggestions[:5]:
+        for t in tool_suggestions[:4]:
             cat = (t.get("tool_category") or "").strip()
             ex = t.get("example_tools") or []
             use = (t.get("use_in_workflow") or "").strip()
@@ -652,18 +625,3 @@ Year: {YEAR}
       </div>
     </div>
     """, unsafe_allow_html=True)
-
-# -------------------------
-# Admin: download saved inputs (local CSV)
-# -------------------------
-with st.expander("Admin: download saved inputs (local CSV)", expanded=False):
-    rows = load_local_logs()
-    if rows:
-        st.caption("Local storage may reset on redeploy. For persistent logging, configure LOG_WEBHOOK_URL.")
-        headers = list(rows[0].keys())
-        out = ",".join(headers) + "\n"
-        for r in rows:
-            out += ",".join([str(r.get(h, "")).replace("\n", " ").replace(",", " ") for h in headers]) + "\n"
-        st.download_button("Download workflow_inputs.csv", data=out, file_name="workflow_inputs.csv", mime="text/csv")
-    else:
-        st.info("No local logs found yet.")
