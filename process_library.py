@@ -1,19 +1,8 @@
 # process_library.py
 # =========================
-# 2026 Workflow Shift Lens — Process Library (Domain → Sub-domain → Sub-process)
+# AI Workflow Optimizer — Process Library
+# (Functional Domain → Process Workflow → Sub Process)
 # =========================
-
-# DOMAINS structure:
-# DOMAINS[domain][sub_domain] = {
-#   "goal": "...",
-#   "sub_processes": {
-#       "Sub-process name": {
-#           "goal": "...(optional override)...",
-#           "default_steps": [ ... one step per line ... ]
-#       },
-#       ...
-#   }
-# }
 
 DOMAINS = {
     "HR / People": {
@@ -331,7 +320,7 @@ DOMAINS = {
     },
 }
 
-# Tool library: keep it stable; model must not invent tools
+# Tool library: stable list — model must not invent tools
 TOOL_LIBRARY = {
     "IDP / OCR (Document processing)": ["ABBYY", "Google Document AI", "Amazon Textract"],
     "RPA": ["UiPath", "Automation Anywhere", "Blue Prism"],
@@ -345,14 +334,13 @@ TOOL_LIBRARY = {
     "Contact Center / CX": ["Genesys", "Zendesk", "Twilio"],
 }
 
-def get_default_steps(domain: str, sub_domain: str, sub_process: str | None = None) -> list[str]:
-    """Return default steps for selected domain/sub_domain/sub_process if available."""
+def get_default_steps(domain: str, workflow: str, sub_process: str | None = None) -> list[str]:
+    """Return default steps for selected Functional Domain / Process Workflow / Sub Process."""
     d = DOMAINS.get(domain, {})
-    sd = d.get(sub_domain, {})
-    sp = (sd.get("sub_processes") or {})
+    wf = d.get(workflow, {})
+    sp = (wf.get("sub_processes") or {})
     if sub_process and sub_process in sp:
         return sp[sub_process].get("default_steps", []) or []
-    # fallback: first sub-process steps if exists
     if isinstance(sp, dict) and len(sp) > 0:
         first_key = list(sp.keys())[0]
         return sp[first_key].get("default_steps", []) or []
