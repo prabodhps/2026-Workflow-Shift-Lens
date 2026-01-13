@@ -401,7 +401,8 @@ def load_local_logs(limit: int = 200):
 # -------------------------
 # Prompt
 # -------------------------
-TOOL_LIB_FOR_PROMPT = json.dumps(TOOL_LIBRARY, ensure_ascii=False)
+TOOL_LIB_FOR_PROMPT = json.dumps(TOOL_LIBRARY, ensure_ascii=False, indent=2)
+TOOL_LIB_FOR_PROMPT_ESCAPED = TOOL_LIB_FOR_PROMPT.replace("{", "{{").replace("}", "}}")
 
 PROMPT_TEMPLATE = f"""
 You are an evidence-minded operating model + process analyst.
