@@ -1,273 +1,359 @@
+# process_library.py
 # =========================
-# Process + Tool Library (for Workflow Shift Lens)
+# 2026 Workflow Shift Lens — Process Library (Domain → Sub-domain → Sub-process)
 # =========================
 
-# Controlled tool library: model must choose ONLY from these examples.
-TOOL_LIBRARY = [
-    {
-        "tool_category": "Process mining",
-        "examples": ["Celonis", "SAP Signavio", "Microsoft Process Mining (Power Automate)", "UiPath Process Mining"],
-        "best_for": "Finding bottlenecks and variants from event logs."
-    },
-    {
-        "tool_category": "iPaaS / Integration",
-        "examples": ["MuleSoft", "Boomi", "Azure Logic Apps", "Workato"],
-        "best_for": "Connecting ERP/CRM/HRIS and orchestrating workflows across systems."
-    },
-    {
-        "tool_category": "RPA",
-        "examples": ["UiPath", "Automation Anywhere", "Microsoft Power Automate (Desktop)"],
-        "best_for": "Automating repetitive UI steps where APIs aren’t available."
-    },
-    {
-        "tool_category": "IDP / OCR (Document processing)",
-        "examples": ["ABBYY", "Google Document AI", "Azure AI Document Intelligence", "Amazon Textract"],
-        "best_for": "Extracting structured data from invoices/forms/PDFs."
-    },
-    {
-        "tool_category": "AI copilots for office work",
-        "examples": ["Microsoft Copilot", "Google Gemini for Workspace"],
-        "best_for": "Drafting, summarizing, synthesizing across email/docs."
-    },
-    {
-        "tool_category": "Service desk / ITSM AI",
-        "examples": ["ServiceNow (Now Assist)", "Jira Service Management AI", "Zendesk AI"],
-        "best_for": "Ticket triage, knowledge suggestions, assisted resolution."
-    },
-    {
-        "tool_category": "CRM / Sales AI",
-        "examples": ["Salesforce Einstein", "Microsoft Dynamics 365 Copilot", "HubSpot AI"],
-        "best_for": "Lead scoring, next-best action, forecasting assistance."
-    },
-    {
-        "tool_category": "CLM (Contract lifecycle management)",
-        "examples": ["Icertis", "DocuSign CLM", "Ironclad"],
-        "best_for": "Contract workflows, clause libraries, approvals, obligations."
-    },
-    {
-        "tool_category": "e-Signature",
-        "examples": ["DocuSign", "Adobe Acrobat Sign"],
-        "best_for": "Faster signature cycles + audit trails."
-    },
-    {
-        "tool_category": "Spend / Procurement suites",
-        "examples": ["SAP Ariba", "Coupa", "Jaggaer"],
-        "best_for": "Catalog buying, approvals, supplier onboarding, spend visibility."
-    },
-    {
-        "tool_category": "Finance close / controls automation",
-        "examples": ["BlackLine", "FloQast"],
-        "best_for": "Reconciliations, close checklists, controls evidence."
-    },
-    {
-        "tool_category": "Analytics / BI",
-        "examples": ["Power BI", "Tableau", "Looker"],
-        "best_for": "Dashboards, operational reporting, KPI monitoring."
-    },
-    {
-        "tool_category": "Knowledge base / enterprise search",
-        "examples": ["Confluence", "SharePoint", "Notion"],
-        "best_for": "Publishing SOPs/policies/playbooks; searchable knowledge."
-    },
-]
+# DOMAINS structure:
+# DOMAINS[domain][sub_domain] = {
+#   "goal": "...",
+#   "sub_processes": {
+#       "Sub-process name": {
+#           "goal": "...(optional override)...",
+#           "default_steps": [ ... one step per line ... ]
+#       },
+#       ...
+#   }
+# }
 
 DOMAINS = {
+    "HR / People": {
+        "Hire-to-Retire (H2R)": {
+            "goal": "Deliver a seamless employee lifecycle with compliance, speed, and strong experience.",
+            "sub_processes": {
+                "Hiring (End-to-end)": {
+                    "default_steps": [
+                        "Workforce need identified",
+                        "Job approval & requisition",
+                        "Job posting / sourcing",
+                        "Screening & shortlist",
+                        "Interviews",
+                        "Offer & negotiation",
+                        "Background checks",
+                        "Onboarding setup",
+                        "Day-1 onboarding",
+                        "Probation check-in",
+                    ]
+                },
+                "Recruiting — Sourcing & Screening": {
+                    "default_steps": [
+                        "Role intake & success profile",
+                        "Sourcing strategy",
+                        "Candidate search / outreach",
+                        "Inbound application triage",
+                        "Resume screening",
+                        "Initial phone screen",
+                        "Shortlist & hiring manager review",
+                    ]
+                },
+                "Recruiting — Interview to Offer": {
+                    "default_steps": [
+                        "Interview plan & panel setup",
+                        "Candidate scheduling",
+                        "Interviews & feedback capture",
+                        "Decision meeting",
+                        "Offer drafting",
+                        "Offer approval",
+                        "Offer negotiation",
+                        "Offer acceptance",
+                    ]
+                },
+                "Promotion": {
+                    "default_steps": [
+                        "Eligibility review",
+                        "Performance & potential evidence",
+                        "Manager justification",
+                        "Calibration / talent review",
+                        "Budget check",
+                        "Approval workflow",
+                        "Employee communication",
+                        "HRIS update",
+                    ]
+                },
+                "Employee Transfer": {
+                    "default_steps": [
+                        "Transfer request raised",
+                        "Role / position validation",
+                        "Comp & grade check",
+                        "Approvals",
+                        "Effective date confirmation",
+                        "HRIS update",
+                        "Stakeholder communication",
+                        "Handover plan",
+                    ]
+                },
+                "Performance cycle": {
+                    "default_steps": [
+                        "Goal setting",
+                        "Mid-year check-in",
+                        "Feedback collection",
+                        "Year-end review drafting",
+                        "Calibration",
+                        "Final ratings & outcomes",
+                        "Employee conversations",
+                        "HRIS close-out",
+                    ]
+                },
+            },
+        },
+    },
+
     "Purchasing / Procurement": {
         "Source-to-Settle (S2S)": {
-            "goal": "Reduce cycle time and exceptions; move humans to negotiation, risk decisions, and supplier relationships.",
-            "default_steps": [
-                "Request intake",
-                "Requirements clarify",
-                "Supplier shortlist",
-                "RFx / quotes",
-                "Evaluation",
-                "Negotiation",
-                "Contract draft",
-                "Approvals",
-                "PO issue",
-                "Goods receipt",
-                "Invoice capture",
-                "3-way match",
-                "Exceptions resolve",
-                "Payment",
-                "Supplier review"
-            ]
+            "goal": "Enable compliant buying, reduce cycle time, and increase touchless processing.",
+            "sub_processes": {
+                "Sourcing & RFx": {
+                    "default_steps": [
+                        "Requisition intake",
+                        "Requirements clarification",
+                        "Supplier shortlist",
+                        "RFx / quotes issued",
+                        "Proposal evaluation",
+                        "Supplier selection",
+                        "Award recommendation",
+                        "Approval & sign-off",
+                    ]
+                },
+                "Contracting": {
+                    "default_steps": [
+                        "Contract request intake",
+                        "Template selection",
+                        "Clause drafting / redlines",
+                        "Legal review",
+                        "Risk & compliance checks",
+                        "Approvals",
+                        "Signature & execution",
+                        "Repository upload",
+                    ]
+                },
+                "PO to Goods Receipt": {
+                    "default_steps": [
+                        "Requisition approval",
+                        "PO creation",
+                        "PO dispatch to supplier",
+                        "Order confirmation",
+                        "Delivery scheduling",
+                        "Goods receipt",
+                        "Discrepancy handling",
+                        "Close PO",
+                    ]
+                },
+                "Invoice to Pay": {
+                    "default_steps": [
+                        "Invoice receipt",
+                        "Invoice data capture",
+                        "3-way match",
+                        "Exception resolution",
+                        "Approval for payment",
+                        "Payment execution",
+                        "Remittance notice",
+                        "Supplier query handling",
+                    ]
+                },
+                "Supplier Performance": {
+                    "default_steps": [
+                        "Define supplier KPIs",
+                        "Collect performance data",
+                        "Scorecard generation",
+                        "Issue identification",
+                        "Corrective action plans",
+                        "Business reviews",
+                        "Renewal / exit decision",
+                    ]
+                },
+            },
         },
-        "Procure-to-Pay (P2P)": {
-            "goal": "Touchless processing for clean cases; humans handle exceptions, approvals, supplier escalation.",
-            "default_steps": [
-                "Requisition",
-                "Budget check",
-                "Approvals",
-                "PO creation",
-                "Receiving",
-                "Invoice capture",
-                "Matching",
-                "Exception handling",
-                "Payment"
-            ]
-        },
-        "Contract Lifecycle (CLM)": {
-            "goal": "Faster contracting with better risk controls; humans focus on judgement, negotiation, high-risk clauses.",
-            "default_steps": [
-                "Request intake",
-                "Template select",
-                "Draft contract",
-                "Redline / review",
-                "Risk assessment",
-                "Approvals",
-                "e-Sign",
-                "Obligations track",
-                "Renewals"
-            ]
-        }
-    },
-
-    "Sales": {
-        "Lead-to-Cash (B2B)": {
-            "goal": "Reduce manual handoffs; humans focus on discovery, relationship, deal strategy.",
-            "default_steps": [
-                "Lead capture",
-                "Qualification",
-                "Discovery",
-                "Solution fit",
-                "Proposal",
-                "Pricing approvals",
-                "Negotiation",
-                "Contract",
-                "Order",
-                "Billing",
-                "Collections"
-            ]
-        },
-        "Lead-to-Cash (B2C)": {
-            "goal": "Improve conversion + service; humans handle complex cases and trust moments.",
-            "default_steps": [
-                "Demand capture",
-                "Nurture",
-                "Conversion",
-                "Checkout",
-                "Fulfilment",
-                "Support",
-                "Returns",
-                "Refunds"
-            ]
-        },
-        "Quote-to-Cash (Q2C)": {
-            "goal": "Accelerate quoting; keep control points for discounting + revenue policy.",
-            "default_steps": [
-                "Configure",
-                "Quote",
-                "Discount approval",
-                "Contract",
-                "Order mgmt",
-                "Billing",
-                "Revenue recognition",
-                "Renewals"
-            ]
-        }
-    },
-
-    "Human Resources": {
-        "Hire-to-Retire (H2R)": {
-            "goal": "Reduce admin; humans focus on coaching, judgement, employee experience.",
-            "default_steps": [
-                "Workforce plan",
-                "Requisition",
-                "Sourcing",
-                "Screening",
-                "Interviews",
-                "Offer approvals",
-                "Onboarding",
-                "Performance cycle",
-                "Learning",
-                "Rewards",
-                "Employee support",
-                "Moves",
-                "Offboarding"
-            ]
-        },
-        "Recruit-to-Onboard (R2O)": {
-            "goal": "Faster time-to-hire; humans focus on decision quality + candidate experience.",
-            "default_steps": [
-                "Role definition",
-                "Sourcing",
-                "Screening",
-                "Interview loop",
-                "Hiring decision",
-                "Offer approvals",
-                "Checks",
-                "Onboarding"
-            ]
-        },
-        "HR Case Mgmt": {
-            "goal": "Deflect repetitive queries; humans handle exceptions, empathy moments, policy judgement.",
-            "default_steps": [
-                "Case intake",
-                "Triage",
-                "Policy guidance",
-                "Approvals",
-                "Resolution",
-                "Knowledge update"
-            ]
-        }
     },
 
     "Finance": {
         "Record-to-Report (R2R)": {
-            "goal": "Faster close with fewer manual reconciliations; humans focus on variance + decisions.",
-            "default_steps": [
-                "Transaction capture",
-                "Journal entries",
-                "Reconciliations",
-                "Close checklist",
-                "Consolidation",
-                "Reporting"
-            ]
+            "goal": "Produce timely, accurate financial reporting with strong controls and auditability.",
+            "sub_processes": {
+                "Month-end close": {
+                    "default_steps": [
+                        "Close calendar kickoff",
+                        "Accruals & journals",
+                        "Intercompany reconciliation",
+                        "Account reconciliations",
+                        "Variance analysis",
+                        "Management review",
+                        "Close sign-off",
+                        "Financial statements publish",
+                    ]
+                },
+                "Financial Planning & Analysis (FP&A)": {
+                    "default_steps": [
+                        "Collect actuals",
+                        "Driver identification",
+                        "Forecast update",
+                        "Scenario modeling",
+                        "Business partner reviews",
+                        "Leadership readout",
+                        "Action tracking",
+                    ]
+                },
+                "Accounts Payable (AP)": {
+                    "default_steps": [
+                        "Invoice receipt",
+                        "Invoice coding",
+                        "Approval workflow",
+                        "Payment run",
+                        "Vendor reconciliation",
+                        "AP reporting",
+                    ]
+                },
+                "Accounts Receivable (AR)": {
+                    "default_steps": [
+                        "Invoice issuance",
+                        "Collections follow-up",
+                        "Dispute management",
+                        "Cash application",
+                        "Bad debt review",
+                        "AR reporting",
+                    ]
+                },
+            },
         },
-        "Invoice-to-Cash (I2C)": {
-            "goal": "Automate reminders + matching; humans focus on disputes + negotiation.",
-            "default_steps": [
-                "Billing",
-                "Invoice delivery",
-                "Cash application",
-                "Dunning",
-                "Disputes",
-                "Collections"
-            ]
-        }
     },
 
-    "IT / Operations": {
-        "Incident-to-Resolution (ITSM)": {
-            "goal": "Auto-triage + knowledge resolution; humans handle major incidents + change control.",
-            "default_steps": [
-                "Ticket intake",
-                "Categorize",
-                "Route",
-                "Diagnose",
-                "Resolve",
-                "Confirm",
-                "Post-review"
-            ]
+    "Sales": {
+        "Lead-to-Cash (L2C)": {
+            "goal": "Convert demand into revenue with disciplined pipeline, pricing, and collections.",
+            "sub_processes": {
+                "B2B Sales Cycle": {
+                    "default_steps": [
+                        "Lead qualification",
+                        "Discovery meeting",
+                        "Solution mapping",
+                        "Proposal / quote",
+                        "Negotiation",
+                        "Contract signing",
+                        "Handover to delivery",
+                        "Invoice & collections",
+                    ]
+                },
+                "B2C Sales Cycle": {
+                    "default_steps": [
+                        "Lead / inquiry capture",
+                        "Product recommendation",
+                        "Offer / promotion",
+                        "Checkout / payment",
+                        "Fulfillment",
+                        "Customer support",
+                        "Upsell / retention",
+                    ]
+                },
+                "Collections": {
+                    "default_steps": [
+                        "Invoice aging review",
+                        "Collections outreach",
+                        "Dispute resolution",
+                        "Promise-to-pay tracking",
+                        "Escalation",
+                        "Cash receipt",
+                        "Account update",
+                    ]
+                },
+            },
         },
-        "Change-to-Deploy": {
-            "goal": "Reduce lead time; keep strong risk controls and approvals for high-impact changes.",
-            "default_steps": [
-                "Change request",
-                "Risk assess",
-                "Approvals",
-                "Deploy",
-                "Validate",
-                "Monitor"
-            ]
-        }
-    }
+    },
+
+    "Marketing": {
+        "Plan-to-Perform (Campaign Ops)": {
+            "goal": "Run efficient campaigns with measurable impact and fast learning loops.",
+            "sub_processes": {
+                "Campaign planning": {
+                    "default_steps": [
+                        "Objective & audience definition",
+                        "Channel mix planning",
+                        "Content plan",
+                        "Creative production",
+                        "Launch readiness",
+                        "Launch execution",
+                        "Performance monitoring",
+                        "Optimization & learnings",
+                    ]
+                },
+                "Content production": {
+                    "default_steps": [
+                        "Brief creation",
+                        "Draft content",
+                        "Design / creative",
+                        "Compliance review",
+                        "Publishing",
+                        "Distribution",
+                        "Performance review",
+                    ]
+                },
+            },
+        },
+    },
+
+    "IT / Technology": {
+        "Build-to-Run (Delivery & Ops)": {
+            "goal": "Deliver changes reliably while improving speed, quality, and operational resilience.",
+            "sub_processes": {
+                "IT Project Delivery": {
+                    "default_steps": [
+                        "Requirements intake",
+                        "Scope & plan",
+                        "Resource allocation",
+                        "Build / configure",
+                        "Testing",
+                        "Release approval",
+                        "Deployment",
+                        "Post-release monitoring",
+                    ]
+                },
+                "Incident management": {
+                    "default_steps": [
+                        "Incident detection",
+                        "Triage & severity",
+                        "Assignment",
+                        "Diagnosis",
+                        "Fix / workaround",
+                        "Customer updates",
+                        "Post-incident review",
+                    ]
+                },
+                "Change management (ITIL)": {
+                    "default_steps": [
+                        "Change request",
+                        "Impact assessment",
+                        "CAB review",
+                        "Approval",
+                        "Implementation",
+                        "Validation",
+                        "Close-out",
+                    ]
+                },
+            },
+        },
+    },
 }
 
+# Tool library: keep it stable; model must not invent tools
+TOOL_LIBRARY = {
+    "IDP / OCR (Document processing)": ["ABBYY", "Google Document AI", "Amazon Textract"],
+    "RPA": ["UiPath", "Automation Anywhere", "Blue Prism"],
+    "Workflow / BPM": ["ServiceNow", "Appian", "Camunda"],
+    "ERP / Finance": ["SAP", "Oracle", "Microsoft Dynamics 365"],
+    "CRM / Sales": ["Salesforce", "HubSpot", "Microsoft Dynamics 365 CRM"],
+    "HRIS / Talent": ["Workday", "SAP SuccessFactors", "Oracle HCM"],
+    "Analytics / BI": ["Power BI", "Tableau", "Looker"],
+    "Knowledge / Search": ["Elastic", "OpenSearch", "Microsoft Search"],
+    "Integration / iPaaS": ["MuleSoft", "Boomi", "Workato"],
+    "Contact Center / CX": ["Genesys", "Zendesk", "Twilio"],
+}
 
-def get_default_steps(domain: str, workflow: str) -> list[str]:
-    try:
-        return DOMAINS[domain][workflow].get("default_steps", [])
-    except Exception:
-        return []
+def get_default_steps(domain: str, sub_domain: str, sub_process: str | None = None) -> list[str]:
+    """Return default steps for selected domain/sub_domain/sub_process if available."""
+    d = DOMAINS.get(domain, {})
+    sd = d.get(sub_domain, {})
+    sp = (sd.get("sub_processes") or {})
+    if sub_process and sub_process in sp:
+        return sp[sub_process].get("default_steps", []) or []
+    # fallback: first sub-process steps if exists
+    if isinstance(sp, dict) and len(sp) > 0:
+        first_key = list(sp.keys())[0]
+        return sp[first_key].get("default_steps", []) or []
+    return []
