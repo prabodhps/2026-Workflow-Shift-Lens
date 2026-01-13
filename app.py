@@ -657,3 +657,7 @@ if isinstance(data, dict):
         st.write("\n".join([f"• {x}" for x in notes[:6]]))
 
     st.caption("Tip: Don’t enter sensitive info. This is a demo/prototype for exploration, not professional advice.")
+# ---- DEBUG (REMOVE FOR PROD) ----
+# with st.expander("Debug"):
+#     st.write("Last raw model output")
+#     st.code(st.session_state.get("last_raw", ""))
